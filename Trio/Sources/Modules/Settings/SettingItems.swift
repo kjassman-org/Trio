@@ -76,7 +76,13 @@ enum SettingItems {
         SettingItem(
             title: "Apple Watch",
             view: .watch,
-            searchContents: ["Display on Watch", "Show Protein and Fat", "Confirm Bolus Faster"],
+            searchContents: [
+                "Display on Watch",
+                "Show Protein and Fat",
+                "Confirm Bolus Faster",
+                "Allow Bolus from Watch",
+                "Allow Carbs from Watch"
+            ],
             path: ["Devices", "Smart Watch", "Apple Watch"]
         ),
         SettingItem(

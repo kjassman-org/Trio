@@ -51,6 +51,8 @@ enum WatchMessageKeys {
     static let maxProtein = "maxProtein"
     static let bolusIncrement = "bolusIncrement"
     static let confirmBolusFaster = "confirmBolusFaster"
+    static let allowWatchBolus = "allowWatchBolus"
+    static let allowWatchCarbs = "allowWatchCarbs"
 
     // Notification Actions
     static let snoozeDuration = "snoozeDuration"

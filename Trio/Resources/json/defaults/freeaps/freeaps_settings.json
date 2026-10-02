@@ -39,6 +39,8 @@
   "maxFat": 250,
   "maxProtein": 250,
   "confirmBolusFaster": false,
+  "allowWatchBolus": true,
+  "allowWatchCarbs": true,
   "overrideFactor": 0.8,
   "fattyMeals": false,
   "fattyMealFactor": 0.7,

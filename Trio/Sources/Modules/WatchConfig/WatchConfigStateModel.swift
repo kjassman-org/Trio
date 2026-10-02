@@ -10,6 +10,8 @@ extension WatchConfig {
         @Published var devices: [IQDevice] = []
         @Published var confirmBolusFaster = false
         @Published var showForecastWatch = false
+        @Published var allowWatchBolus = true
+        @Published var allowWatchCarbs = true
 
         /// Garmin watch settings containing all watch-related configuration
         @Published var garminSettings = GarminWatchSettings()
@@ -24,6 +26,8 @@ extension WatchConfig {
             subscribeSetting(\.garminSettings, on: $garminSettings) { garminSettings = $0 }
             subscribeSetting(\.confirmBolusFaster, on: $confirmBolusFaster) { confirmBolusFaster = $0 }
             subscribeSetting(\.showForecastWatch, on: $showForecastWatch) { showForecastWatch = $0 }
+            subscribeSetting(\.allowWatchBolus, on: $allowWatchBolus) { allowWatchBolus = $0 }
+            subscribeSetting(\.allowWatchCarbs, on: $allowWatchCarbs) { allowWatchCarbs = $0 }
 
             devices = garmin.devices
         }

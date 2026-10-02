@@ -45,6 +45,48 @@ struct WatchConfigAppleWatchView: BaseView {
 
             SettingInputSection(
                 decimalValue: $decimalPlaceholder,
+                booleanValue: $state.allowWatchBolus,
+                shouldDisplayHint: $shouldDisplayHint,
+                selectedVerboseHint: Binding(
+                    get: { selectedVerboseHint },
+                    set: {
+                        selectedVerboseHint = $0.map { AnyView($0) }
+                        hintLabel = String(localized: "Allow Bolus from Watch")
+                    }
+                ),
+                units: state.units,
+                type: .boolean,
+                label: String(localized: "Allow Bolus from Watch"),
+                miniHint: String(localized: "Allow insulin boluses to be requested from the Apple Watch."),
+                verboseHint: Text(
+                    "When disabled, the Bolus and Meal & Bolus options are hidden on the Apple Watch, and Trio rejects any bolus request sent from the watch. Overrides and temp targets remain available."
+                ),
+                headerText: String(localized: "Apple Watch Configuration")
+            )
+
+            SettingInputSection(
+                decimalValue: $decimalPlaceholder,
+                booleanValue: $state.allowWatchCarbs,
+                shouldDisplayHint: $shouldDisplayHint,
+                selectedVerboseHint: Binding(
+                    get: { selectedVerboseHint },
+                    set: {
+                        selectedVerboseHint = $0.map { AnyView($0) }
+                        hintLabel = String(localized: "Allow Carbs from Watch")
+                    }
+                ),
+                units: state.units,
+                type: .boolean,
+                label: String(localized: "Allow Carbs from Watch"),
+                miniHint: String(localized: "Allow carb entries to be logged from the Apple Watch."),
+                verboseHint: Text(
+                    "When disabled, the Meal and Meal & Bolus options are hidden on the Apple Watch, and Trio rejects any carb entry sent from the watch. Overrides and temp targets remain available."
+                ),
+                headerText: String(localized: "Apple Watch Configuration")
+            )
+
+            SettingInputSection(
+                decimalValue: $decimalPlaceholder,
                 booleanValue: $state.showForecastWatch,
                 shouldDisplayHint: $shouldDisplayHint,
                 selectedVerboseHint: Binding(

@@ -151,7 +151,7 @@ struct TrioMainWatchView: View {
                     }
                     .controlSize(.large)
                     .buttonStyle(WatchOSButtonStyle(deviceType: state.deviceType))
-                    .disabled(isWatchStateDated || isSessionUnreachable)
+                    .disabled(isWatchStateDated || isSessionUnreachable || state.availableTreatments.isEmpty)
 
                     Button {
                         showingTempTargetSheet = true
@@ -164,7 +164,11 @@ struct TrioMainWatchView: View {
                 }
             }
             .fullScreenCover(isPresented: $showingTreatmentMenuSheet) {
-                TreatmentMenuView(deviceType: state.deviceType, selectedTreatment: $selectedTreatment) {
+                TreatmentMenuView(
+                    deviceType: state.deviceType,
+                    treatments: state.availableTreatments,
+                    selectedTreatment: $selectedTreatment
+                ) {
                     handleTreatmentSelection()
                 }
                 .onAppear {
