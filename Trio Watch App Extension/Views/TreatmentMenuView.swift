@@ -3,10 +3,15 @@ import SwiftUI
 struct TreatmentMenuView: View {
     @Environment(\.dismiss) var dismiss
     let deviceType: WatchSize
-    /// Treatment options to offer, in display order; filtered by the user's watch treatment settings
-    let treatments: [TreatmentOption]
     @Binding var selectedTreatment: TreatmentOption?
     var onSelect: () -> Void // Callback to handle selection and dismiss the sheet
+
+    // Define in array to achieve custom order of treatment options
+    let treatments: [TreatmentOption] = [
+        .meal, // First
+        .bolus, // Second
+        .mealBolusCombo // Third
+    ]
 
     private var iconSize: CGFloat {
         switch deviceType {

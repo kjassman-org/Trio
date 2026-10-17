@@ -355,8 +355,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 watchState.maxProtein = self.settingsManager.settings.maxProtein
                 watchState.bolusIncrement = self.settingsManager.preferences.bolusIncrement
                 watchState.confirmBolusFaster = self.settingsManager.settings.confirmBolusFaster
-                watchState.allowWatchBolus = self.settingsManager.settings.allowWatchBolus
-                watchState.allowWatchCarbs = self.settingsManager.settings.allowWatchCarbs
+                watchState.allowWatchTreatments = self.settingsManager.settings.allowWatchTreatments
 
                 watchState.showForecast = self.settingsManager.settings.showForecastWatch
                 watchState.isForecastCone = self.settingsManager.settings.forecastDisplayType == .cone
@@ -546,8 +545,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             WatchMessageKeys.maxProtein: state.maxProtein,
             WatchMessageKeys.bolusIncrement: state.bolusIncrement,
             WatchMessageKeys.confirmBolusFaster: state.confirmBolusFaster,
-            WatchMessageKeys.allowWatchBolus: state.allowWatchBolus,
-            WatchMessageKeys.allowWatchCarbs: state.allowWatchCarbs,
+            WatchMessageKeys.allowWatchTreatments: state.allowWatchTreatments,
             WatchMessageKeys.units: state.units.rawValue,
             WatchMessageKeys.showForecastWatch: state.showForecast,
             WatchMessageKeys.isForecastCone: state.isForecastCone
@@ -678,7 +676,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                       message[WatchMessageKeys.date] == nil
             {
                 debug(.watchManager, "📱 Received bolus request from watch: \(bolusAmount)U")
-                guard self.settingsManager.settings.allowWatchBolus else {
+                guard self.settingsManager.settings.allowWatchTreatments else {
                     self.rejectDisabledWatchTreatment()
                     return
                 }
@@ -689,7 +687,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             {
                 let date = Date(timeIntervalSince1970: timestamp)
                 debug(.watchManager, "📱 Received carbs request from watch: \(carbsAmount)g at \(date)")
-                guard self.settingsManager.settings.allowWatchCarbs else {
+                guard self.settingsManager.settings.allowWatchTreatments else {
                     self.rejectDisabledWatchTreatment()
                     return
                 }
@@ -703,7 +701,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                     .watchManager,
                     "📱 Received meal bolus combo request from watch: \(bolusAmount)U, \(carbsAmount)g at \(date)"
                 )
-                guard self.settingsManager.settings.allowWatchBolus, self.settingsManager.settings.allowWatchCarbs else {
+                guard self.settingsManager.settings.allowWatchTreatments else {
                     self.rejectDisabledWatchTreatment()
                     return
                 }
@@ -744,8 +742,8 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             }
 
             if message[WatchMessageKeys.requestBolusRecommendation] as? Bool == true {
-                guard self.settingsManager.settings.allowWatchBolus else {
-                    debug(.watchManager, "📱 Ignoring bolus recommendation request - bolusing from watch is disabled")
+                guard self.settingsManager.settings.allowWatchTreatments else {
+                    debug(.watchManager, "📱 Ignoring bolus recommendation request - treatments from watch are disabled")
                     return
                 }
                 let carbs = message[WatchMessageKeys.carbs] as? Int ?? 0

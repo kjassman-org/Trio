@@ -7,37 +7,24 @@ import Testing
         try JSONDecoder().decode(TrioSettings.self, from: Data(json.utf8))
     }
 
-    @Test("Missing keys keep watch bolus and carbs allowed") func missingKeysDefaultToAllowed() throws {
-        let settings = try decode("{}")
-        #expect(settings.allowWatchBolus)
-        #expect(settings.allowWatchCarbs)
+    @Test("Missing key keeps watch treatments allowed") func missingKeyDefaultsToAllowed() throws {
+        #expect(try decode("{}").allowWatchTreatments)
     }
 
-    @Test("Stored false values are decoded") func storedFalseIsDecoded() throws {
-        let settings = try decode(#"{"allowWatchBolus": false, "allowWatchCarbs": false}"#)
-        #expect(!settings.allowWatchBolus)
-        #expect(!settings.allowWatchCarbs)
+    @Test("Stored false value is decoded") func storedFalseIsDecoded() throws {
+        #expect(try decode(#"{"allowWatchTreatments": false}"#).allowWatchTreatments == false)
     }
 
-    @Test("Bolus and carbs are independent") func settingsAreIndependent() throws {
-        let settings = try decode(#"{"allowWatchBolus": false}"#)
-        #expect(!settings.allowWatchBolus)
-        #expect(settings.allowWatchCarbs)
-    }
-
-    @Test("Values round-trip through encoding") func roundTrip() throws {
+    @Test("Value round-trips through encoding") func roundTrip() throws {
         var settings = TrioSettings()
-        settings.allowWatchBolus = false
-        settings.allowWatchCarbs = true
+        settings.allowWatchTreatments = false
         let decoded = try JSONDecoder().decode(TrioSettings.self, from: JSONEncoder().encode(settings))
-        #expect(!decoded.allowWatchBolus)
-        #expect(decoded.allowWatchCarbs)
+        #expect(!decoded.allowWatchTreatments)
     }
 
     @Test("Bundled defaults allow watch treatments") func bundledDefaultsAllow() throws {
         let defaults = OpenAPS.defaults(for: OpenAPS.Trio.settings)
         let settings = try #require(TrioSettings(from: defaults))
-        #expect(settings.allowWatchBolus)
-        #expect(settings.allowWatchCarbs)
+        #expect(settings.allowWatchTreatments)
     }
 }

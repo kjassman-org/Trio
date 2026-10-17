@@ -45,19 +45,7 @@ import WatchConnectivity
     // Pump specific dosing increment
     var bolusIncrement: Decimal = 0.05
     var confirmBolusFaster: Bool = false
-
-    // Treatment permissions, configured in the Trio app's Apple Watch settings
-    var allowWatchBolus: Bool = true
-    var allowWatchCarbs: Bool = true
-
-    /// Treatment options the user may pick, in display order
-    var availableTreatments: [TreatmentOption] {
-        var treatments: [TreatmentOption] = []
-        if allowWatchCarbs { treatments.append(.meal) }
-        if allowWatchBolus { treatments.append(.bolus) }
-        if allowWatchCarbs, allowWatchBolus { treatments.append(.mealBolusCombo) }
-        return treatments
-    }
+    var allowWatchTreatments: Bool = true
 
     // Forecast options
     var showForecast: Bool = false
@@ -581,12 +569,10 @@ import WatchConnectivity
             }
         }
 
-        if let allowWatchBolus = message[WatchMessageKeys.allowWatchBolus] as? Bool {
-            self.allowWatchBolus = allowWatchBolus
-        }
-
-        if let allowWatchCarbs = message[WatchMessageKeys.allowWatchCarbs] as? Bool {
-            self.allowWatchCarbs = allowWatchCarbs
+        if let allowWatchTreatments = message[WatchMessageKeys.allowWatchTreatments] {
+            if let booleanValue = allowWatchTreatments as? Bool {
+                self.allowWatchTreatments = booleanValue
+            }
         }
 
         if let showForecast = message[WatchMessageKeys.showForecastWatch] as? Bool {

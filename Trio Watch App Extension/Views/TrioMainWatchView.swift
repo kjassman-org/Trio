@@ -143,15 +143,17 @@ struct TrioMainWatchView: View {
                     .tint(isOverrideActive ? Color.purple : nil)
                     .disabled(isWatchStateDated || isSessionUnreachable)
 
-                    Button {
-                        showingTreatmentMenuSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .foregroundStyle(Color.bgDarkerDarkBlue)
+                    if state.allowWatchTreatments {
+                        Button {
+                            showingTreatmentMenuSheet = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundStyle(Color.bgDarkerDarkBlue)
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(WatchOSButtonStyle(deviceType: state.deviceType))
+                        .disabled(isWatchStateDated || isSessionUnreachable)
                     }
-                    .controlSize(.large)
-                    .buttonStyle(WatchOSButtonStyle(deviceType: state.deviceType))
-                    .disabled(isWatchStateDated || isSessionUnreachable || state.availableTreatments.isEmpty)
 
                     Button {
                         showingTempTargetSheet = true
@@ -164,11 +166,7 @@ struct TrioMainWatchView: View {
                 }
             }
             .fullScreenCover(isPresented: $showingTreatmentMenuSheet) {
-                TreatmentMenuView(
-                    deviceType: state.deviceType,
-                    treatments: state.availableTreatments,
-                    selectedTreatment: $selectedTreatment
-                ) {
+                TreatmentMenuView(deviceType: state.deviceType, selectedTreatment: $selectedTreatment) {
                     handleTreatmentSelection()
                 }
                 .onAppear {
