@@ -46,6 +46,7 @@ import WatchConnectivity
     // Pump specific dosing increment
     var bolusIncrement: Decimal = 0.05
     var confirmBolusFaster: Bool = false
+    var watchUsageMode: WatchUsageMode = .companion
 
     // Forecast options
     var showForecast: Bool = false
@@ -507,6 +508,12 @@ import WatchConnectivity
             if let booleanValue = confirmBolusFaster as? Bool {
                 self.confirmBolusFaster = booleanValue
             }
+        }
+
+        if let rawValue = message[WatchMessageKeys.watchUsageMode] as? String,
+           let watchUsageMode = WatchUsageMode(rawValue: rawValue)
+        {
+            self.watchUsageMode = watchUsageMode
         }
 
         if let showForecast = message[WatchMessageKeys.showForecastWatch] as? Bool {

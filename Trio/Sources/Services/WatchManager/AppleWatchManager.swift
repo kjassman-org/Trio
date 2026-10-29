@@ -540,6 +540,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             WatchMessageKeys.maxProtein: state.maxProtein,
             WatchMessageKeys.bolusIncrement: state.bolusIncrement,
             WatchMessageKeys.confirmBolusFaster: state.confirmBolusFaster,
+            WatchMessageKeys.watchUsageMode: state.watchUsageMode.rawValue,
             WatchMessageKeys.units: state.units.rawValue,
             WatchMessageKeys.showForecastWatch: state.showForecast,
             WatchMessageKeys.isForecastCone: state.isForecastCone,
@@ -587,6 +588,9 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
         // tick has bumped the build-time date.
         var state = state
         state.date = Date()
+
+        // Set here so fallback states (e.g. no recent glucose) never re-enable restricted watch actions
+        state.watchUsageMode = settingsManager.settings.watchUsageMode
 
         let message: [String: Any] = watchStateToDictionary(from: state)
 
@@ -670,6 +674,10 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                       message[WatchMessageKeys.date] == nil
             {
                 info(.watch, "Watch requested bolus of \(bolusAmount) U")
+                guard self.settingsManager.settings.watchUsageMode.allowsTreatments else {
+                    self.rejectDisallowedWatchRequest()
+                    return
+                }
                 self.handleBolusRequest(Decimal(bolusAmount))
             } else if let carbsAmount = message[WatchMessageKeys.carbs] as? Int,
                       let timestamp = message[WatchMessageKeys.date] as? TimeInterval,
@@ -677,6 +685,10 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             {
                 let date = Date(timeIntervalSince1970: timestamp)
                 info(.watch, "Watch requested \(carbsAmount) g carbs at \(date)")
+                guard self.settingsManager.settings.watchUsageMode.allowsTreatments else {
+                    self.rejectDisallowedWatchRequest()
+                    return
+                }
                 self.handleCarbsRequest(carbsAmount, date)
             } else if let bolusAmount = message[WatchMessageKeys.bolus] as? Double,
                       let carbsAmount = message[WatchMessageKeys.carbs] as? Int,
@@ -684,6 +696,10 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             {
                 let date = Date(timeIntervalSince1970: timestamp)
                 info(.watch, "Watch requested bolus of \(bolusAmount) U with \(carbsAmount) g carbs at \(date)")
+                guard self.settingsManager.settings.watchUsageMode.allowsTreatments else {
+                    self.rejectDisallowedWatchRequest()
+                    return
+                }
                 self.handleCombinedRequest(bolusAmount: Decimal(bolusAmount), carbsAmount: Decimal(carbsAmount), date: date)
             } else if message[WatchMessageKeys.cancelOverride] == nil,
                       message[WatchMessageKeys.activateOverride] == nil,
@@ -701,6 +717,15 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                     message: "Error! Invalid or incomplete data received from watch.",
                     ackCode: .genericFailure
                 )
+            }
+
+            let isAdjustmentRequest = message[WatchMessageKeys.cancelOverride] != nil ||
+                message[WatchMessageKeys.activateOverride] != nil ||
+                message[WatchMessageKeys.activateTempTarget] != nil ||
+                message[WatchMessageKeys.cancelTempTarget] != nil
+            if isAdjustmentRequest, !self.settingsManager.settings.watchUsageMode.allowsAdjustments {
+                self.rejectDisallowedWatchRequest()
+                return
             }
 
             if message[WatchMessageKeys.cancelOverride] as? Bool == true {
@@ -724,6 +749,10 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             }
 
             if message[WatchMessageKeys.requestBolusRecommendation] as? Bool == true {
+                guard self.settingsManager.settings.watchUsageMode.allowsTreatments else {
+                    info(.watch, "Ignored watch bolus recommendation request, not allowed in watch usage mode")
+                    return
+                }
                 let carbs = message[WatchMessageKeys.carbs] as? Int ?? 0
 
                 var minPredBG: Decimal = 54
@@ -819,6 +848,19 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 self?.retryConnection()
             }
         }
+    }
+
+    /// Rejects a request from the Watch that the Watch Usage Mode in the Apple Watch settings does not allow
+    private func rejectDisallowedWatchRequest() {
+        info(.watch, "Rejected watch request, not allowed in watch usage mode \(settingsManager.settings.watchUsageMode.rawValue)")
+        sendAcknowledgment(
+            toWatch: false,
+            message: String(
+                localized: "Not allowed by the Watch Usage Mode in Trio settings.",
+                comment: "Failure message sent to watch when the watch usage mode does not allow the requested action"
+            ),
+            ackCode: .genericFailure
+        )
     }
 
     /// Processes bolus requests received from the Watch
