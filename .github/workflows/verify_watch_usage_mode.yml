@@ -1,0 +1,66 @@
+name: Verify watch usage mode PR (temporary)
+
+on:
+  push:
+    branches:
+      - 'ci/verify-watch-usage-mode'
+
+jobs:
+  test:
+    name: Build and run unit tests
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies -workspace Trio.xcworkspace -scheme "Trio Tests" \
+            -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -workspace Trio.xcworkspace -scheme "Trio Tests" -destination "$DESTINATION" \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            -skipPackagePluginValidation -skipMacroValidation -quiet \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        run: grep -E "error:" build.log | head -n 20 | while IFS= read -r l; do echo "::error title=Build error::$l"; done
+
+      - name: Report files changed by the build (SwiftFormat / string catalog)
+        if: always()
+        run: |
+          git status --porcelain | while IFS= read -r l; do echo "::warning title=Changed by build::$l"; done
+          git diff -- . ':(exclude)*.xcstrings' | head -n 60 | while IFS= read -r l; do echo "::notice title=Build diff::$l"; done
+          git diff --stat -- '*.xcstrings' | while IFS= read -r l; do echo "::notice title=xcstrings diff::$l"; done
+
+      - name: Run tests
+        id: run_tests
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -workspace Trio.xcworkspace -scheme "Trio Tests" -destination "$DESTINATION" \
+            -parallel-testing-enabled NO -resultBundlePath TestResults.xcresult 2>&1 | tee test.log
+
+      - name: Report test results
+        if: always()
+        run: |
+          grep -E "Suite \"Watch Usage Mode\"|Companion allows|Adjustments allows|View allows|falls back to companion|Every mode round-trips|Bundled defaults use companion" test.log \
+            | grep -E "passed|failed" | while IFS= read -r l; do echo "::notice title=Feature tests::$l"; done
+          grep -E "^(✔|✘|􀟈|􀢄|􁁛).*(Test run|tests? in [0-9]+ suites?)|Executed [0-9]+ tests?|\*\* TEST (SUCCEEDED|FAILED|EXECUTE SUCCEEDED|EXECUTE FAILED) \*\*" test.log \
+            | tail -n 5 | while IFS= read -r l; do echo "::notice title=Totals::$l"; done
+          grep -E "✘|􀢄|failed after|: error: |Test Case .* failed" test.log | head -n 20 | while IFS= read -r l; do echo "::error title=Failure::$l"; done
+          xcrun xcresulttool get test-results summary --path TestResults.xcresult --compact 2>/dev/null \
+            | head -c 3000 | while IFS= read -r l; do echo "::notice title=xcresult summary::$l"; done
