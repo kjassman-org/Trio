@@ -1,0 +1,60 @@
+name: Verify watch app tests (temporary)
+
+on:
+  push:
+    branches:
+      - 'ci/verify-watch-tests'
+
+jobs:
+  watch-tests:
+    name: Build and run watch app tests
+    runs-on: macos-26
+    timeout-minutes: 150
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies -workspace Trio.xcworkspace -scheme "Trio Watch AppTests" \
+            -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Build and run watch app tests
+        id: watch_tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcrun simctl list runtimes | grep -i watchos || true
+          WATCH_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for rt, devs in d.items() if "watchOS" in rt for x in devs))')
+          echo "Using watch simulator $WATCH_ID"
+          xcodebuild test -workspace Trio.xcworkspace -scheme "Trio Watch AppTests" \
+            -destination "platform=watchOS Simulator,id=$WATCH_ID" \
+            -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -skipMacroValidation \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            -resultBundlePath WatchTestResults.xcresult \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee watch-test.log
+
+      - name: Report watch test results
+        if: always()
+        run: |
+          join() { awk 'BEGIN{ORS="%0A"}1'; }
+          tests=$(grep -E 'Test ".*" (passed|failed)|Suite ".*" (passed|failed)|Test run with [0-9]+ tests|\*\* (TEST|BUILD) [A-Z ]+ \*\*' watch-test.log | tail -n 25)
+          echo "::notice title=Watch tests (outcome ${{ steps.watch_tests.outcome }})::$(echo "$tests" | join)"
+          errors=$(grep -E ': error: |✘|failed after|Expectation failed|Unable to find a destination|xcodebuild: error' watch-test.log | head -n 20)
+          if [ -n "$errors" ]; then echo "::error title=Watch test errors::$(echo "$errors" | join)"; fi
+          git status --porcelain | while IFS= read -r l; do echo "::warning title=Changed by build::$l"; done
+          summary=$(xcrun xcresulttool get test-results summary --path WatchTestResults.xcresult --compact 2>/dev/null | head -c 2000)
+          echo "::notice title=xcresult summary::$summary"
+          cases=$(xcrun xcresulttool get test-results tests --path WatchTestResults.xcresult --compact 2>/dev/null             | python3 -c 'import json,sys
+          def walk(n):
+              if n.get("nodeType") == "Test Case": print(n.get("result"), "-", n.get("name"))
+              for c in n.get("children", []): walk(c)
+          for n in json.load(sys.stdin).get("testNodes", []): walk(n)')
+          echo "::notice title=Watch test cases::$(echo "$cases" | join)"
+          grep -E "Test [Cc]ase|Executed [0-9]+ test|tests? in [0-9]+ suites?" watch-test.log | tail -n 20 | while IFS= read -r l; do echo "$l"; done
