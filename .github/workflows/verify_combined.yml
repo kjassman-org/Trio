@@ -1,0 +1,88 @@
+name: Verify Watch Usage Mode + watch test fix (temporary)
+
+on:
+  push:
+    branches:
+      - 'ci/verify-combined'
+
+jobs:
+  test:
+    name: iPhone and watch tests
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      IPHONE_DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies -workspace Trio.xcworkspace -scheme "Trio Tests" \
+            -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Run iPhone tests
+        id: iphone_tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild test -workspace Trio.xcworkspace -scheme "Trio Tests" -destination "$IPHONE_DESTINATION" \
+            -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -skipMacroValidation \
+            -parallel-testing-enabled NO -resultBundlePath iPhoneResults.xcresult \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee iphone-test.log
+
+      - name: Run watch tests
+        id: watch_tests
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          WATCH_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for rt, devs in d.items() if "watchOS" in rt for x in devs))')
+          echo "Using watch simulator $WATCH_ID"
+          xcodebuild test -workspace Trio.xcworkspace -scheme "Trio Watch AppTests" \
+            -destination "platform=watchOS Simulator,id=$WATCH_ID" \
+            -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -skipMacroValidation \
+            -resultBundlePath WatchResults.xcresult \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee watch-test.log
+
+      - name: Report results
+        if: always()
+        run: |
+          join() { awk 'BEGIN{ORS="%0A"}1'; }
+          cat > list_cases.py <<'PY'
+          import json, sys
+          suite_filter = set(sys.argv[1:])
+          def walk(node, suite):
+              kind = node.get("nodeType")
+              name = node.get("name", "")
+              if kind == "Test Suite":
+                  suite = name
+              if kind == "Test Case" and (not suite_filter or suite in suite_filter):
+                  print(node.get("result"), "-", name)
+              for child in node.get("children", []):
+                  walk(child, suite)
+          for node in json.load(sys.stdin).get("testNodes", []):
+              walk(node, None)
+          PY
+          for bundle in iPhoneResults WatchResults; do
+            summary=$(xcrun xcresulttool get test-results summary --path $bundle.xcresult --compact 2>/dev/null \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin); print({k: d.get(k) for k in ("result","totalTestCount","passedTests","failedTests","skippedTests")})')
+            echo "::notice title=$bundle summary::$summary"
+          done
+          usage=$(xcrun xcresulttool get test-results tests --path iPhoneResults.xcresult --compact | python3 list_cases.py "Watch Usage Mode" "WatchUsageModeTests")
+          echo "::notice title=Watch Usage Mode tests (iPhone)::$(echo "$usage" | join)"
+          watch=$(xcrun xcresulttool get test-results tests --path WatchResults.xcresult --compact | python3 list_cases.py)
+          echo "::notice title=Watch app tests::$(echo "$watch" | join)"
+          echo "::notice title=Step outcomes::iPhone tests: ${{ steps.iphone_tests.outcome }}, watch tests: ${{ steps.watch_tests.outcome }}"
+          failures=$(cat iphone-test.log watch-test.log | grep -E ': error: |✘|failed after|Expectation failed' | head -n 20)
+          if [ -n "$failures" ]; then echo "::error title=Failures::$(echo "$failures" | join)"; fi
+          git status --porcelain -- . ':(exclude)*.log' ':(exclude)*.xcresult' ':(exclude)list_cases.py' \
+            | while IFS= read -r l; do echo "::warning title=Changed by build::$l"; done
