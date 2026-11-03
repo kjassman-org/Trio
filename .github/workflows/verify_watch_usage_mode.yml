@@ -1,0 +1,93 @@
+name: Verify watch usage mode PR (temporary)
+
+on:
+  push:
+    branches:
+      - 'ci/verify-watch-usage-mode'
+
+jobs:
+  test:
+    name: Build and run unit tests
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies -workspace Trio.xcworkspace -scheme "Trio Tests" \
+            -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -workspace Trio.xcworkspace -scheme "Trio Tests" -destination "$DESTINATION" \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            -skipPackagePluginValidation -skipMacroValidation -quiet \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        run: grep -E "error:" build.log | head -n 20 | while IFS= read -r l; do echo "::error title=Build error::$l"; done
+
+      - name: Report files changed by the build (SwiftFormat / string catalog)
+        if: always()
+        run: |
+          git status --porcelain | while IFS= read -r l; do echo "::warning title=Changed by build::$l"; done
+          git diff -- . ':(exclude)*.xcstrings' | head -n 60 | while IFS= read -r l; do echo "::notice title=Build diff::$l"; done
+          git diff --stat -- '*.xcstrings' | while IFS= read -r l; do echo "::notice title=xcstrings diff::$l"; done
+
+      - name: Run tests
+        id: run_tests
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -workspace Trio.xcworkspace -scheme "Trio Tests" -destination "$DESTINATION" \
+            -parallel-testing-enabled NO -resultBundlePath TestResults.xcresult 2>&1 | tee test.log
+
+      - name: Report test results
+        if: always()
+        run: |
+          # One annotation per category (GitHub keeps at most 10 notices per step)
+          join() { awk 'BEGIN{ORS="%0A"}1'; }
+          feature=$(grep -E 'Suite "Watch Usage Mode"|Companion allows|Adjustments allows|View allows|falls back to companion|Every mode round-trips|Bundled defaults use companion|Treatment requests are only|Override and temp target requests|Data requests and alert snoozes|Carbs with a date|Values the iPhone does not act on' test.log | grep -E "passed|failed")
+          echo "::notice title=Feature tests ($(echo "$feature" | grep -c passed) passed, $(echo "$feature" | grep -c failed) failed)::$(echo "$feature" | join)"
+          totals=$(grep -E "Test run with [0-9]+ tests|\*\* TEST (EXECUTE )?(SUCCEEDED|FAILED) \*\*" test.log | tail -n 3)
+          echo "::notice title=Totals::$(echo "$totals" | join)"
+          failures=$(grep -E "✘|failed after|Test Case .* failed" test.log | head -n 20)
+          if [ -n "$failures" ]; then echo "::error title=Failures::$(echo "$failures" | join)"; fi
+          summary=$(xcrun xcresulttool get test-results summary --path TestResults.xcresult --compact 2>/dev/null | head -c 3000)
+          echo "::notice title=xcresult summary::$summary"
+
+      - name: Build and run watch app tests
+        id: watch_tests
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcrun simctl list runtimes | grep -i watchos || true
+          WATCH_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for rt, devs in d.items() if "watchOS" in rt for x in devs))')
+          echo "Using watch simulator $WATCH_ID"
+          xcodebuild test -workspace Trio.xcworkspace -scheme "Trio Watch AppTests" \
+            -destination "platform=watchOS Simulator,id=$WATCH_ID" \
+            -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation -skipMacroValidation \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee watch-test.log
+
+      - name: Report watch test results
+        if: always()
+        run: |
+          join() { awk 'BEGIN{ORS="%0A"}1'; }
+          tests=$(grep -E 'Test ".*" (passed|failed)|Suite ".*" (passed|failed)|Test run with [0-9]+ tests|\*\* (TEST|BUILD) [A-Z ]+ \*\*' watch-test.log | tail -n 25)
+          echo "::notice title=Watch tests (outcome ${{ steps.watch_tests.outcome }})::$(echo "$tests" | join)"
+          errors=$(grep -E ': error: |error: |✘|failed after|Unable to find a destination|xcodebuild: error' watch-test.log | head -n 15)
+          if [ -n "$errors" ]; then echo "::error title=Watch test errors::$(echo "$errors" | join)"; fi
